@@ -1,10 +1,9 @@
 # SPICEWORKS API ACCESS
-# mike.stiers@gmail.com
-# 03.31.2015
+# fern@fern-net.net
+# 12.08.25
 
 import urllib
-import urllib2
-import cookielib
+import http.cookiejar
 import json
 
 # enter your login informaiton and the Spiceworks URL
@@ -13,44 +12,53 @@ user_password = "your password"
 spiceworks_url = "http://your.spiceworks.url"
 pickaxe = "\\" # not sure why this is required for the form
 
-# create a cookie jar and install the handler for urllib2
-cookiejar = cookielib.LWPCookieJar()
-opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cookiejar))
+# create a cookie jar and install the handler for urllib
+cookiejar = http.cookiejar.LWPCookieJar()
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookiejar))
 # set the agent to Firefox to avoid incompatible browser detection
 opener.addheaders = [('User-agent', 'Mozilla/5.0')]
-urllib2.install_opener(opener)
+urllib.request.install_opener(opener)
 
 # browse to the page and store a cookie
-request = urllib2.Request(spiceworks_url, None)
-f = urllib2.urlopen(request)
+f = urllib.request.urlopen(spiceworks_url, None)
 html = f.read()
 
 # find the authenticity token that is needed to submit the login form
-token = html.split("<")
+
+token = str(html).split("<")
+
 for tokens in token:
-	if "token" in tokens:
-		token2 = tokens.split('"')
-		authenticity_token = token2[5]
-		print "authenticity_token: ", authenticity_token
+    if "token" in tokens:
+        token2 = tokens.split('"')
+        authenticity_token = token2[3]
 f.close()
 
 # encode the data that is to be posted from the form and then submit the form
-data = urllib.urlencode({"authenticity_token" : authenticity_token, "user[email]" : user_email, "user[password]" : user_password, "_pickaxe" : pickaxe})
-request = urllib2.Request(spiceworks_url + "/login", data)
-f = urllib2.urlopen(request)
+data = bytes(urllib.parse.urlencode({"authenticity_token" : authenticity_token, "email" : user_email, "password" : user_password, "_pickaxe" : pickaxe}), encoding='utf8')
+request = urllib.request.Request("https://accounts.spiceworks.com/sign_in/", data)
+f = urllib.request.urlopen(request)
 f.close()
 
-# you should now be logged in and able to access the API
+#should now be logged in and able to access the API
 
-# here is an example of getting the JSON for a ticket #1 and then printing some key fields
-request = urllib2.Request(spiceworks_url + "/api/tickets/1.json", None)
-f = urllib2.urlopen(request)
+#visits ticket.json and pulls page contents into var "html""
+request = urllib.request.Request(spiceworks_url + "/api/tickets.json", None)
+f = urllib.request.urlopen(request)
 html = f.read()
 f.close()
-#print html
+
+#set list and dictionary up for loops ahead
+ticketList=[] #stores a ticket in each entry, with nested lists
+userDict={} #relationship between user IDs and their names and emails
 
 json_data = json.loads(html)
-print "Creator: ", json_data['creator']['email']
-print "Assigned to: ", json_data['assigned_to']
-description = json_data['description'].replace("\r\n","")
-print description
+
+for users in json_data['end_users']: #iterates through 'end_users' heading within json
+    email = users['email']
+    name = users['name']
+    userDict.update({ users['id'] : [name,email] }) #adds ID as key value, with a 2 size list for name and email
+
+
+for tickets in json_data['tickets']: #iterates through 'tickets' heading within json
+    ticketList.append([tickets['id'],tickets['summary'],tickets['status'],userDict.get(tickets['creator']['id'],['null','null'])[0],userDict.get(tickets['creator']['id'],['null','null'])[1]]) #adds ticket information to 'ticketList[]'
+    print (ticketList[len(ticketList)-1])
